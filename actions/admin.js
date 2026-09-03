@@ -29,6 +29,59 @@ export async function verifyAdmin() {
 }
 
 /**
+ * Headline counts for the admin dashboard's stat cards.
+ */
+export async function getAdminOverviewStats() {
+  const isAdmin = await verifyAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const [totalAppointments, totalUsers, totalDoctors, totalPatients] = await Promise.all([
+    db.appointment.count(),
+    db.user.count(),
+    db.user.count({ where: { role: "DOCTOR", verificationStatus: "VERIFIED" } }),
+    db.user.count({ where: { role: "PATIENT" } }),
+  ]);
+
+  return { totalAppointments, totalUsers, totalDoctors, totalPatients };
+}
+
+/**
+ * Platform-wide AI triage oversight — every consultation with a completed
+ * report, regardless of status/reviewing doctor, plus aggregate stats. This
+ * is for monitoring the AI's safety/accuracy across the whole platform
+ * (dissertation O5 evaluation), not for actioning individual reports.
+ */
+export async function getAllAiReports() {
+  const isAdmin = await verifyAdmin();
+  if (!isAdmin) throw new Error("Unauthorized");
+
+  const consultations = await db.consultation.findMany({
+    where: { report: { isNot: null } },
+    include: { report: true, patient: { select: { name: true, email: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const stats = {
+    total: consultations.length,
+    byRiskLevel: { LOW: 0, MEDIUM: 0, HIGH: 0, EMERGENCY: 0 },
+    byStatus: { IN_PROGRESS: 0, AWAITING_REVIEW: 0, REVIEWED: 0 },
+    avgConfidence: 0,
+  };
+
+  let confidenceSum = 0;
+  for (const c of consultations) {
+    stats.byStatus[c.status] = (stats.byStatus[c.status] || 0) + 1;
+    if (c.report) {
+      stats.byRiskLevel[c.report.riskLevel] = (stats.byRiskLevel[c.report.riskLevel] || 0) + 1;
+      confidenceSum += c.report.confidence;
+    }
+  }
+  stats.avgConfidence = consultations.length > 0 ? confidenceSum / consultations.length : 0;
+
+  return { consultations, stats };
+}
+
+/**
  * Gets all doctors with pending verification
  */
 export async function getPendingDoctors() {
