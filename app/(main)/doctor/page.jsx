@@ -1,78 +1,97 @@
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 import { getDoctorAppointments, getDoctorAvailability } from "@/actions/doctor";
 import { AvailabilitySettings } from "./_components/availability-settings";
 import { getCurrentUser } from "@/actions/onboarding";
 import { redirect } from "next/navigation";
-import { Calendar, Clock, DollarSign } from "lucide-react";
+import { Calendar, Clock, ClipboardList, Stethoscope, CalendarCheck, UserSearch } from "lucide-react";
 import DoctorAppointmentsList from "./_components/appointments-list";
-import { getDoctorEarnings, getDoctorPayouts } from "@/actions/payout";
-import { DoctorEarnings } from "./_components/doctor-earnings";
+import { listReportsForReview, listReviewedReports } from "@/actions/consult";
+import { AiReportsList } from "./_components/ai-reports-list";
+import { PatientLookup } from "./_components/patient-lookup";
+import { DashboardHeader } from "@/components/dashboard-header";
+import { StatCard } from "@/components/stat-card";
+import { DashboardShell } from "@/components/dashboard-shell";
+
+const NAV_ITEMS = [
+  { value: "appointments", label: "Appointments", icon: <Calendar className="h-4 w-4" /> },
+  { value: "availability", label: "Availability", icon: <Clock className="h-4 w-4" /> },
+  { value: "ai-reports", label: "AI Reports", icon: <ClipboardList className="h-4 w-4" /> },
+  { value: "patient-lookup", label: "Patient Lookup", icon: <UserSearch className="h-4 w-4" /> },
+];
 
 export default async function DoctorDashboardPage() {
   const user = await getCurrentUser();
 
-  const [appointmentsData, availabilityData, earningsData, payoutsData] =
+  const [appointmentsData, availabilityData, aiReports, reviewedReports] =
     await Promise.all([
       getDoctorAppointments(),
       getDoctorAvailability(),
-      getDoctorEarnings(),
-      getDoctorPayouts(),
+      listReportsForReview(),
+      listReviewedReports(),
     ]);
 
-  //   // Redirect if not a doctor
   if (user?.role !== "DOCTOR") {
     redirect("/onboarding");
   }
 
-  // If already verified, redirect to dashboard
   if (user?.verificationStatus !== "VERIFIED") {
     redirect("/doctor/verification");
   }
 
+  const appointments = appointmentsData.appointments || [];
+  const todayCount = appointments.filter((a) => {
+    const start = new Date(a.startTime);
+    const now = new Date();
+    return (
+      start.getFullYear() === now.getFullYear() &&
+      start.getMonth() === now.getMonth() &&
+      start.getDate() === now.getDate()
+    );
+  }).length;
+
   return (
-    <Tabs
-      defaultValue="earnings"
-      className="grid grid-cols-1 md:grid-cols-4 gap-6"
-    >
-      <TabsList className="md:col-span-1 bg-muted/30 border h-14 md:h-40 flex sm:flex-row md:flex-col w-full p-2 md:p-1 rounded-md md:space-y-2 sm:space-x-2 md:space-x-0">
-        <TabsTrigger
-          value="earnings"
-          className="flex-1 md:flex md:items-center md:justify-start md:px-4 md:py-3 w-full"
-        >
-          <DollarSign className="h-4 w-4 mr-2 hidden md:inline" />
-          <span>Earnings</span>
-        </TabsTrigger>
-        <TabsTrigger
-          value="appointments"
-          className="flex-1 md:flex md:items-center md:justify-start md:px-4 md:py-3 w-full"
-        >
-          <Calendar className="h-4 w-4 mr-2 hidden md:inline" />
-          <span>Appointments</span>
-        </TabsTrigger>
-        <TabsTrigger
-          value="availability"
-          className="flex-1 md:flex md:items-center md:justify-start md:px-4 md:py-3 w-full"
-        >
-          <Clock className="h-4 w-4 mr-2 hidden md:inline" />
-          <span>Availability</span>
-        </TabsTrigger>
-      </TabsList>
-      <div className="md:col-span-3">
-        <TabsContent value="appointments" className="border-none p-0">
-          <DoctorAppointmentsList
-            appointments={appointmentsData.appointments || []}
-          />
+    <>
+      <DashboardHeader
+        icon={<Stethoscope className="h-7 w-7" />}
+        title="Doctor Dashboard"
+        subtitle={`Welcome back, Dr. ${user.name?.split(" ")[0] || ""}`}
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <StatCard
+          icon={<Calendar className="h-8 w-8 text-emerald-400" />}
+          value={appointments.length}
+          label="Total Appointments"
+          color="emerald"
+        />
+        <StatCard
+          icon={<CalendarCheck className="h-8 w-8 text-blue-400" />}
+          value={todayCount}
+          label="Today's Appointments"
+          color="blue"
+        />
+        <StatCard
+          icon={<ClipboardList className="h-8 w-8 text-red-400" />}
+          value={(aiReports || []).length}
+          label="AI Reports Pending"
+          color="red"
+        />
+      </div>
+
+      <DashboardShell navItems={NAV_ITEMS} defaultValue="appointments">
+        <TabsContent value="appointments" className="border-none p-0 mt-0">
+          <DoctorAppointmentsList appointments={appointments} />
         </TabsContent>
-        <TabsContent value="availability" className="border-none p-0">
+        <TabsContent value="availability" className="border-none p-0 mt-0">
           <AvailabilitySettings slots={availabilityData.slots || []} />
         </TabsContent>
-        <TabsContent value="earnings" className="border-none p-0">
-          <DoctorEarnings
-            earnings={earningsData.earnings || {}}
-            payouts={payoutsData.payouts || []}
-          />
+        <TabsContent value="ai-reports" className="border-none p-0 mt-0">
+          <AiReportsList pending={aiReports || []} reviewed={reviewedReports || []} />
         </TabsContent>
-      </div>
-    </Tabs>
+        <TabsContent value="patient-lookup" className="border-none p-0 mt-0">
+          <PatientLookup />
+        </TabsContent>
+      </DashboardShell>
+    </>
   );
 }
