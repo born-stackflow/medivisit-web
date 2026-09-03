@@ -1,0 +1,264 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  clerkUserId       String    @unique // Clerk's user ID
+  email             String    @unique
+  name              String?
+  imageUrl          String?
+  role              UserRole  @default(UNASSIGNED) // UNASSIGNED, PATIENT, DOCTOR, ADMIN
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Patient-specific fields
+  credits           Int       @default(2) // Accumulated credit balance
+  
+  // Doctor-specific fields
+  specialty         String?
+  experience        Int?      // Years of experience
+  credentialUrl     String?   // Document URL
+  description       String?   @db.Text
+  verificationStatus VerificationStatus?  @default(PENDING)
+  
+  // Relations
+  patientAppointments Appointment[] @relation("PatientAppointments")
+  doctorAppointments  Appointment[] @relation("DoctorAppointments")
+  availabilities      Availability[]
+  transactions        CreditTransaction[]
+  payouts             Payout[]
+  consultations       Consultation[]
+  prescriptionsWritten  Prescription[] @relation("DoctorPrescriptions")
+  prescriptionsReceived Prescription[] @relation("PatientPrescriptions")
+  dietPlansWritten      DietPlan[]     @relation("DoctorDietPlans")
+  dietPlansReceived     DietPlan[]     @relation("PatientDietPlans")
+}
+
+enum UserRole {
+  UNASSIGNED
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model Availability {
+  id        String   @id @default(uuid())
+  doctorId  String
+  doctor    User     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  status    SlotStatus @default(AVAILABLE)
+  
+  @@index([doctorId, startTime])
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+model Appointment {
+  id                String   @id @default(uuid())
+  patientId         String
+  patient           User     @relation("PatientAppointments", fields: [patientId], references: [id])
+  doctorId          String
+  doctor            User     @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  startTime         DateTime // Start time of appointment
+  endTime           DateTime // End time of appointment
+  status            AppointmentStatus @default(SCHEDULED)
+  notes             String?  @db.Text
+  patientDescription String? @db.Text
+    
+  // Video session fields
+  videoSessionId    String?  // Vonage Video API Session ID
+  videoSessionToken String?  // Optional: Can store tokens if needed
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, startTime])
+  @@index([doctorId, startTime])
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model CreditTransaction {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount            Int      // Positive for additions, negative for usage
+  type              TransactionType
+  packageId         String?  // Reference to which package was purchased
+  createdAt         DateTime @default(now())
+}
+
+enum TransactionType {
+  CREDIT_PURCHASE     // Credits purchased through Clerk Billing
+  APPOINTMENT_DEDUCTION // Credit used for appointment
+  ADMIN_ADJUSTMENT      // Manual adjustment by admin
+}
+
+model Payout {
+  id              String        @id @default(uuid())
+  doctorId        String
+  doctor          User          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  amount          Float         // Total payout amount in USD
+  credits         Int           // Number of credits being paid out
+  platformFee     Float         // Platform fee deducted (2 USD per credit)
+  netAmount       Float         // Amount doctor receives (8 USD per credit)
+  paypalEmail     String        // Doctor's PayPal email for payout
+  status          PayoutStatus  @default(PROCESSING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  processedAt     DateTime?     // When admin marked it as processed
+  processedBy     String?       // Admin who processed it
+
+  @@index([status, createdAt])
+  @@index([doctorId, status])
+}
+
+enum PayoutStatus {
+  PROCESSING
+  PROCESSED
+}
+
+// --- AI triage / Medi-Visit dissertation feature -------------------------
+// Everything below this line is the dissertation's own contribution on top
+// of the template: an AI-led symptom triage chat (Gemini, via the separate
+// ai-service FastAPI app) that produces a structured report a doctor can
+// review before/alongside a booked appointment.
+
+model Consultation {
+  id           String             @id @default(uuid())
+  patientId    String
+  patient      User               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  status       ConsultationStatus @default(IN_PROGRESS)
+  messages     Message[]
+  report       SymptomReport?
+  prescription Prescription?
+  dietPlan     DietPlan?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([patientId, status])
+}
+
+enum ConsultationStatus {
+  IN_PROGRESS
+  AWAITING_REVIEW
+  REVIEWED
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  consultationId String
+  consultation   Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  sender         MessageSender
+  content        String       @db.Text
+  createdAt      DateTime     @default(now())
+
+  @@index([consultationId, createdAt])
+}
+
+enum MessageSender {
+  PATIENT
+  AI
+}
+
+model SymptomReport {
+  id                 String       @id @default(uuid())
+  consultationId     String       @unique
+  consultation       Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  summary            String       @db.Text
+  extractedSymptoms  Json
+  predictedCategory  String
+  confidence         Float
+  riskLevel          RiskLevel
+  recommendedAction  String       @db.Text
+  createdAt          DateTime     @default(now())
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+// A prescription a doctor writes for a patient, optionally tied to the AI
+// consultation/report that prompted it. One prescription per consultation
+// (a doctor issuing a follow-up would create a fresh consultation/review
+// cycle rather than editing an old prescription) — kept intentionally
+// simple for the MVP rather than modelling prescription revisions/refills.
+model Prescription {
+  id             String        @id @default(uuid())
+  doctorId       String
+  doctor         User          @relation("DoctorPrescriptions", fields: [doctorId], references: [id])
+  patientId      String
+  patient        User          @relation("PatientPrescriptions", fields: [patientId], references: [id])
+  consultationId String?       @unique
+  consultation   Consultation? @relation(fields: [consultationId], references: [id])
+  diagnosis      String?
+  notes          String?       @db.Text
+  items          PrescriptionItem[]
+  createdAt      DateTime      @default(now())
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, createdAt])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicationName String
+  dosage         String
+  frequency      String
+  duration       String
+  instructions   String?
+}
+
+// Doctor-authored dietary guidance for a patient, optionally tied to the AI
+// consultation/report that prompted it. Can start life as an AI-generated
+// draft (Gemini, via ai-service) but is always reviewed/edited and
+// explicitly saved by a doctor before it exists as a record — never shown
+// to a patient unreviewed. aiGenerated just records provenance for the
+// dissertation's ethics discussion, it doesn't change how the record is
+// used once saved.
+model DietPlan {
+  id             String        @id @default(uuid())
+  doctorId       String
+  doctor         User          @relation("DoctorDietPlans", fields: [doctorId], references: [id])
+  patientId      String
+  patient        User          @relation("PatientDietPlans", fields: [patientId], references: [id])
+  consultationId String?       @unique
+  consultation   Consultation? @relation(fields: [consultationId], references: [id])
+  foodsToInclude String?       @db.Text
+  foodsToAvoid   String?       @db.Text
+  guidance       String?       @db.Text
+  aiGenerated    Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@index([patientId, createdAt])
+  @@index([doctorId, createdAt])
+}
