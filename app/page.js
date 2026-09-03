@@ -1,13 +1,32 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowRight, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Pricing from "@/components/pricing";
 import { creditBenefits, features, testimonials } from "@/lib/data";
+import { getCurrentUser } from "@/actions/onboarding";
+import { AiShowcase } from "@/components/ai-showcase";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentUser();
+
+  // Doctors/admins land straight in their portal, not the patient-facing
+  // marketing page — this is what signing in via the general /sign-in page
+  // used to do for everyone regardless of role.
+  if (user?.role === "DOCTOR") {
+    redirect("/doctor");
+  }
+  if (user?.role === "ADMIN") {
+    redirect("/admin");
+  }
+  // Patients are NOT redirected away from here — unlike doctors/admins,
+  // this homepage is still their own audience (marketing copy, AI
+  // showcase, "Find Doctors"), so they should be able to browse it
+  // freely. They get to their dashboard via the header link instead.
+
   return (
     <div className="bg-background">
       {/* Hero Section */}
@@ -26,8 +45,9 @@ export default function Home() {
                 <span className="gradient-title">anytime, anywhere</span>
               </h1>
               <p className="text-muted-foreground text-lg md:text-xl max-w-md">
-                Book appointments, consult via video, and manage your healthcare
-                journey all in one secure platform.
+                Start with our AI Symptom Checker, then book appointments and
+                consult via video — all in one secure platform, with a real
+                doctor reviewing every AI report.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button
@@ -62,6 +82,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* AI Symptom Checker Showcase */}
+      <AiShowcase />
 
       {/* Features Section */}
       <section className="py-20 bg-muted/30">

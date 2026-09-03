@@ -2,15 +2,16 @@ import React from "react";
 import { Button } from "./ui/button";
 import {
   Calendar,
-  CreditCard,
   ShieldCheck,
   Stethoscope,
   User,
+  MessageCircleHeart,
+  FileHeart,
+  LayoutDashboard,
 } from "lucide-react";
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import { checkUser } from "@/lib/checkUser";
-import { Badge } from "./ui/badge";
 import { checkAndAllocateCredits } from "@/actions/credits";
 import Image from "next/image";
 
@@ -71,18 +72,56 @@ export default async function Header() {
 
             {/* Patient Links */}
             {user?.role === "PATIENT" && (
-              <Link href="/appointments">
-                <Button
-                  variant="outline"
-                  className="hidden md:inline-flex items-center gap-2"
-                >
-                  <Calendar className="h-4 w-4" />
-                  My Appointments
-                </Button>
-                <Button variant="ghost" className="md:hidden w-10 h-10 p-0">
-                  <Calendar className="h-4 w-4" />
-                </Button>
-              </Link>
+              <>
+                <Link href="/dashboard">
+                  <Button
+                    variant="outline"
+                    className="hidden md:inline-flex items-center gap-2"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    My Dashboard
+                  </Button>
+                  <Button variant="ghost" className="md:hidden w-10 h-10 p-0">
+                    <LayoutDashboard className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/ai-consult">
+                  <Button
+                    variant="outline"
+                    className="hidden md:inline-flex items-center gap-2"
+                  >
+                    <MessageCircleHeart className="h-4 w-4" />
+                    AI Symptom Checker
+                  </Button>
+                  <Button variant="ghost" className="md:hidden w-10 h-10 p-0">
+                    <MessageCircleHeart className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/my-reports">
+                  <Button
+                    variant="outline"
+                    className="hidden md:inline-flex items-center gap-2"
+                  >
+                    <FileHeart className="h-4 w-4" />
+                    My Reports
+                  </Button>
+                  <Button variant="ghost" className="md:hidden w-10 h-10 p-0">
+                    <FileHeart className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/appointments">
+                  <Button
+                    variant="outline"
+                    className="hidden md:inline-flex items-center gap-2"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    My Appointments
+                  </Button>
+                  <Button variant="ghost" className="md:hidden w-10 h-10 p-0">
+                    <Calendar className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </>
             )}
 
             {/* Unassigned Role */}
@@ -101,31 +140,6 @@ export default async function Header() {
               </Link>
             )}
           </SignedIn>
-
-          {(!user || user?.role !== "ADMIN") && (
-            <Link href={user?.role === "PATIENT" ? "/pricing" : "/doctor"}>
-              <Badge
-                variant="outline"
-                className="h-9 bg-emerald-900/20 border-emerald-700/30 px-3 py-1 flex items-center gap-2"
-              >
-                <CreditCard className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-emerald-400">
-                  {user && user.role !== "ADMIN" ? (
-                    <>
-                      {user.credits}{" "}
-                      <span className="hidden md:inline">
-                        {user?.role === "PATIENT"
-                          ? "Credits"
-                          : "Earned Credits"}
-                      </span>
-                    </>
-                  ) : (
-                    <>Pricing</>
-                  )}
-                </span>
-              </Badge>
-            </Link>
-          )}
 
           <SignedOut>
             <SignInButton>

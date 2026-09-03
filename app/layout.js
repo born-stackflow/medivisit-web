@@ -20,12 +20,18 @@ export default function RootLayout({ children }) {
       appearance={{
         baseTheme: dark,
       }}
+      localization={{
+        // Blanks out the "(Optional)" hint next to First name / Last name.
+        // This is a text-localization key, not a stylable element — hiding
+        // it via `appearance.elements` (a different Clerk API) is a no-op.
+        formFieldHintText__optional: "",
+      }}
     >
       <html lang="en" suppressHydrationWarning>
         <head>
           <link rel="icon" href="icon.png" sizes="any" />
         </head>
-        <body className={`${inter.className}`}>
+        <body className={`${inter.className}`} suppressHydrationWarning>
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
@@ -35,10 +41,10 @@ export default function RootLayout({ children }) {
             <Header />
             <main className="min-h-screen">{children}</main>
             <Toaster richColors />
-
+      
             <footer className="bg-muted/50 py-4">
               <div className="container mx-auto px-4 text-center text-gray-200">
-                <p>Made by <Link className="text-emerald-300 hover:text-emerald-600" href="https://github.com/safdarali01">Safdar Ali</Link>.</p>
+                <p>Made by <Link className="text-emerald-300 hover:text-emerald-600" href="https://github.com/codewithahmedkhan">Ahmed Khan</Link>.</p>
               </div>
             </footer>
           </ThemeProvider>
